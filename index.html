@@ -58,6 +58,7 @@
   </main>
 
   <script>
+    // ===== State & helpers =====
     let TEAM_ID = Number(localStorage.getItem('TEAM_ID') || 159748);
 
     const $gw = document.getElementById('gw');
@@ -76,6 +77,8 @@
     function idMap(arr){ const m=new Map(); for(const x of arr) m.set(x.id,x); return m; }
     function teamShort(BOOT,id){ return BOOT.teams.find(t=>t.id===id)?.short_name||'?'; }
     function getPos(elementsById, elId){ const p=elementsById.get(elId); return p ? p.element_type : null; } // 1 GK, 2 DEF, 3 MID, 4 FWD
+
+    // BPS -> Bonus
     function computeBonus(bpsList){
       const sorted=[...bpsList].sort((a,b)=>b.bps-a.bps).slice(0,10);
       if(!sorted.length) return {};
@@ -89,7 +92,7 @@
       return awards;
     }
 
-    // Match FPL web_name to PL full name (rough match: last name & first initial)
+    // name matching (FPL web_name vs PL full name)
     function norm(s){ return (s||'').toLowerCase().replace(/[^a-z]/g,''); }
     function matchPlayer(fplName, plName){
       const fn = norm(fplName);
@@ -112,6 +115,7 @@
       return null;
     }
 
+    // ===== Render =====
     async function render(){
       $status.textContent='جارِ التحديث…';
       try{
@@ -129,7 +133,7 @@
 
         $legend.innerHTML = `الفريق النشط: <b>${TEAM_ID}</b> — الجولة: <b>${gw}</b>`;
 
-        // explain not needed for PL stats, just need bps & fixture mapping
+        // bpsByFixture من live.elements
         const bpsByFixture = {};
         if(Array.isArray(live.elements)){
           for(const el of live.elements){
@@ -141,24 +145,20 @@
           }
         }
 
-        // Build map fixtureId -> pulse_id
-        const pulseByFixtureId = {};
-        for(const fx of fixtures){ if(fx.id && fx.pulse_id) pulseByFixtureId[fx.id] = fx.pulse_id; }
-
         $fixtures.innerHTML='';
         const fr=document.createDocumentFragment();
 
         for (const f of fixtures) {
-          const fxId=f.id;
-          const pulseId = pulseByFixtureId[fxId];
-          const home=teamShort(BOOT,f.team_h);
-          const away=teamShort(BOOT,f.team_a);
-          const ko=f.kickoff_time ? new Date(f.kickoff_time).toLocaleString() : '—';
+          const fxId = f.id;
+          const pulseId = f.pulse_id; // متوفر حسب بياناتك
+          const home = teamShort(BOOT,f.team_h);
+          const away = teamShort(BOOT,f.team_a);
+          const ko   = f.kickoff_time ? new Date(f.kickoff_time).toLocaleString() : '—';
 
-          const bpsList=(bpsByFixture[fxId]||[]).sort((a,b)=>b.bps-a.bps).slice(0,12);
-          const bonus=computeBonus(bpsList);
+          const bpsList = (bpsByFixture[fxId] || []).sort((a,b)=>b.bps-a.bps).slice(0,12);
+          const bonus = computeBonus(bpsList);
 
-          // Fetch PL stats
+          // 1) حاول جلب PL
           let plPlayers = [];
           if (pulseId) {
             try {
@@ -174,7 +174,8 @@
                       clearances: get('clearances'),
                       blocks: get('blocks'),
                       interceptions: get('interceptions'),
-                      clearances_blocks_interceptions: get('clearances_blocks_interceptions') || (get('clearances')+get('blocks')+get('interceptions')),
+                      clearances_blocks_interceptions:
+                        get('clearances_blocks_interceptions') || (get('clearances')+get('blocks')+get('interceptions')),
                       tackles: get('tackles'),
                       recoveries: get('recoveries'),
                     }
@@ -189,10 +190,26 @@
               if (pl?.homeTeam?.players) pushPlayers(pl.homeTeam.players);
               if (pl?.awayTeam?.players) pushPlayers(pl.awayTeam.players);
               if (pl?.stats?.players) pushPlayers(pl.stats.players);
-            } catch(e) { console.warn('PL fetch failed', pulseId, e); }
+            } catch(e) {
+              console.warn('PL fetch failed', pulseId, e);
+            }
           }
           const plMap = new Map(plPlayers.map(p => [p.name, p.stats]));
 
+          // 2) Fallback من FPL: defensive_contribution لهذه المباراة
+          const dcMap = new Map();
+          const dcStat = (f.stats || []).find(s => (s.identifier || '').toLowerCase().includes('defensive_contribution'));
+          if (dcStat) {
+            for (const side of ['a','h']) {
+              for (const ent of (dcStat[side] || [])) {
+                if (ent && ent.element != null) {
+                  dcMap.set(ent.element, Number(ent.value || 0));
+                }
+              }
+            }
+          }
+
+          // الجدول
           const thead = `
             <thead>
               <tr>
@@ -206,36 +223,53 @@
           const rows = bpsList.map(row=>{
             const p = elementsById.get(row.element);
             const name = p ? p.web_name : `#${row.element}`;
-            const pos = p ? p.element_type : null;
+            const pos  = p ? p.element_type : null; // 1 GK, 2 DEF, 3 MID, 4 FWD
 
+            // طابق اسم PL إن وجد
             let foundStats = null;
-            for (const [plName, s] of plMap.entries()) { if (matchPlayer(name, plName)) { foundStats = s; break; } }
-            const s = foundStats || {clearances:0,blocks:0,interceptions:0,clearances_blocks_interceptions:0,tackles:0,recoveries:0};
-
-            let total, defcon;
-            if (pos===1 || pos===2) { // DEF/GK
-              total = s.clearances + s.blocks + s.interceptions + s.tackles;
-              defcon = total >= 10 ? 2 : '';
-            } else { // MID/FWD
-              const cbi = s.clearances_blocks_interceptions || (s.clearances + s.blocks + s.interceptions);
-              total = s.clearances + s.blocks + cbi + s.tackles + s.recoveries;
-              defcon = total >= 12 ? 2 : '';
+            for (const [plName, s] of plMap.entries()) {
+              if (matchPlayer(name, plName)) { foundStats = s; break; }
             }
-            const intOrCbi = (pos===1||pos===2) ? s.interceptions : (s.clearances_blocks_interceptions || (s.clearances+s.blocks+s.interceptions));
-            const recv = (pos===3||pos===4) ? s.recoveries : '';
+            const s = foundStats || {
+              clearances:0, blocks:0, interceptions:0,
+              clearances_blocks_interceptions:0, tackles:0, recoveries:0
+            };
 
+            // حساب Total/Defcon
+            let total, defcon;
+            if (foundStats) {
+              if (pos===1 || pos===2) { // DEF/GK
+                total = s.clearances + s.blocks + s.interceptions + s.tackles;
+                defcon = total >= 10 ? 2 : '';
+              } else { // MID/FWD
+                const cbi = s.clearances_blocks_interceptions || (s.clearances + s.blocks + s.interceptions);
+                total = s.clearances + s.blocks + cbi + s.tackles + s.recoveries;
+                defcon = total >= 12 ? 2 : '';
+              }
+            } else {
+              total = Number(dcMap.get(row.element) || 0); // Fallback من FPL
+              if (pos===1 || pos===2) defcon = total >= 10 ? 2 : '';
+              else defcon = total >= 12 ? 2 : '';
+            }
+
+            const intOrCbi = (pos===1||pos===2)
+              ? (s.interceptions || 0)
+              : (s.clearances_blocks_interceptions || (s.clearances + s.blocks + s.interceptions));
+            const recv = (pos===3||pos===4) ? (s.recoveries || 0) : '';
+
+            // وسوم فريقي/الكابتن/الڤايس
             const mine = picks?.picks?.some(px=>px.element===row.element);
-            const isC = picks?.picks?.some(px=>px.element===row.element && (px.is_captain||px.multiplier===2));
-            const isVC= picks?.picks?.some(px=>px.element===row.element && px.is_vice_captain);
-            const tags=[];
-            if(mine) tags.push('<span class="tag">فريقي</span>');
-            if(isC)  tags.push('<span class="tag cap">C</span>');
-            if(isVC) tags.push('<span class="tag vc">VC</span>');
+            const isC  = picks?.picks?.some(px=>px.element===row.element && (px.is_captain||px.multiplier===2));
+            const isVC = picks?.picks?.some(px=>px.element===row.element && px.is_vice_captain);
+            const tags = [];
+            if (mine) tags.push('<span class="tag">فريقي</span>');
+            if (isC)  tags.push('<span class="tag cap">C</span>');
+            if (isVC) tags.push('<span class="tag vc">VC</span>');
 
             return `
               <tr>
                 <td style="text-align:right">${name} ${tags.join(' ')}</td>
-                <td>${row.bps}</td><td class="bonus">${bonus[row.element]||0}</td>
+                <td>${row.bps}</td><td class="bonus">${(bonus[row.element]||0)}</td>
                 <td>${s.clearances||0}</td>
                 <td>${s.blocks||0}</td>
                 <td>${intOrCbi||0}</td>
@@ -246,9 +280,9 @@
               </tr>`;
           }).join('');
 
-          const card=document.createElement('div');
-          card.className='card';
-          card.innerHTML=`
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.innerHTML = `
             <div class="fixture-head">
               <div>
                 <div class="teams">${home} vs ${away}</div>
@@ -268,6 +302,7 @@
       }
     }
 
+    // ===== Events =====
     document.getElementById('refresh').addEventListener('click', render);
     $applyTeam.addEventListener('click', ()=>{
       const v = Number($teamId.value);
@@ -277,6 +312,7 @@
       render();
     });
 
+    // ===== Boot =====
     render();
     (async function loop(){ while(true){ await sleep(30000); await render(); } })();
   </script>
