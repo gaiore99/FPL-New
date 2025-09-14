@@ -3,38 +3,48 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>FPL CAFE — Live Bonus & Stats</title>
+  <title>FPL CAFE — Live Bonus & Defcon</title>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
-    :root{--bg:#0b0e14;--card:#121621;--border:#1e2433;--ink:#e6e6e6;--muted:#9aa4b2;--accent:#2f7;}
+    :root{
+      --bg:#0b0e14;--card:#111525;--border:#1e2537;--ink:#f2f5f9;--muted:#a9b3c3;--accent:#2fff88;--warn:#ffd54f;
+    }
     *{box-sizing:border-box}
     body{font-family:'Tajawal',system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--ink);margin:0;}
-    header{position:sticky;top:0;background:linear-gradient(180deg,rgba(11,14,20,.95),rgba(11,14,20,.7));backdrop-filter:blur(6px);
-           border-bottom:1px solid var(--border);padding:12px 16px;z-index:5;}
-    .wrap{max-width:1200px;margin:0 auto;}
-    h1{margin:0;font-size:28px;color:var(--accent);font-weight:900;}
-    .subtitle{font-size:14px;color:var(--muted);margin-bottom:8px;}
-    .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px}
-    input,button{padding:8px 10px;border:1px solid var(--border);background:#151923;color:var(--ink);border-radius:10px}
+    header{
+      position:sticky;top:0;background:linear-gradient(180deg,rgba(11,14,20,.97),rgba(11,14,20,.80));
+      backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:14px 16px;z-index:5;
+    }
+    .wrap{max-width:1220px;margin:0 auto;}
+    h1{margin:0;font-size:30px;color:var(--accent);font-weight:900;letter-spacing:.5px}
+    .subtitle{font-size:14px;color:var(--muted);margin-top:2px}
+    .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+    input,button{padding:9px 12px;border:1px solid var(--border);background:#141a2b;color:var(--ink);border-radius:10px;font-size:14px}
     button{cursor:pointer}
-    .status{font-size:12px;color:var(--muted)}
+    .status{font-size:13px;color:var(--muted)}
     main{padding:16px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px}
     .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px}
     .fixture-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-    .teams{font-weight:800}
+    .teams{font-weight:800;font-size:16px}
     .kickoff{font-size:12px;color:var(--muted)}
     .pill{font-size:12px;padding:2px 10px;border-radius:999px;border:1px solid var(--border)}
-    .pill.live{border-color:var(--accent);}
+    .pill.live{border-color:var(--accent)}
     table{width:100%;border-collapse:collapse;table-layout:fixed}
-    th,td{padding:6px 8px;border-bottom:1px dashed #23293b;font-size:13px;vertical-align:middle;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    td:first-child, th:first-child{ text-align:right }
+    thead th{
+      position:sticky;top:0;background:var(--card);z-index:1;
+      font-size:13.5px;color:#dfe6f3;border-bottom:1px solid #263049;padding:7px 6px
+    }
+    tbody td{padding:8px 6px;border-bottom:1px dashed #263049;font-size:14px;vertical-align:middle;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    td:first-child, th:first-child{text-align:right}
     .bonus{font-weight:800}
     .muted{color:var(--muted)}
     .tag{font-size:11px;border:1px solid #2a3247;border-radius:999px;padding:1px 6px;margin-left:4px}
-    .cap{border-color:#ffd54f;color:#ffd54f}
+    .cap{border-color:var(--warn);color:var(--warn)}
     .vc{border-color:#81d4fa;color:#81d4fa}
-    .hi{color:#2f7;font-weight:700}
+    .hi{color:var(--accent);font-weight:800}
+    .legend{color:var(--muted);font-size:13px;margin-bottom:8px}
+    .defcell{font-weight:800}
   </style>
 </head>
 <body>
@@ -44,7 +54,7 @@
       <div class="subtitle">by: gaiore</div>
       <div class="controls">
         <label>الجولة: <input id="gw" type="number" min="1" max="38" value="1"></label>
-        <label>Team ID: <input id="teamId" type="number" min="1" value="159748" style="width:120px"></label>
+        <label>Team ID: <input id="teamId" type="number" min="1" value="159748" style="width:130px"></label>
         <button id="applyTeam">تطبيق الفريق</button>
         <button id="refresh">تحديث الآن</button>
         <span id="status" class="status"></span>
@@ -53,7 +63,7 @@
   </header>
 
   <main class="wrap">
-    <div id="legend" class="muted" style="margin-bottom:10px"></div>
+    <div id="legend" class="legend"></div>
     <div id="fixtures" class="grid"></div>
   </main>
 
@@ -92,17 +102,6 @@
       return awards;
     }
 
-    // name matching (FPL web_name vs PL full name)
-    function norm(s){ return (s||'').toLowerCase().replace(/[^a-z]/g,''); }
-    function matchPlayer(fplName, plName){
-      const fn = norm(fplName);
-      const parts = (plName||'').split(' ').filter(Boolean);
-      if (parts.length === 0) return false;
-      const last = norm(parts[parts.length-1]);
-      const first = norm(parts[0])[0] || '';
-      return (fn === last) || (fn && last.startsWith(fn)) || (fn && (fn[0] === first && last.includes(fn.slice(1))));
-    }
-
     async function getMyPicks(gw){
       try { return await j(`/api/entry/${TEAM_ID}/event/${gw}/picks`); }
       catch(e){
@@ -131,9 +130,9 @@
           getMyPicks(gw)
         ]);
 
-        $legend.innerHTML = `الفريق النشط: <b>${TEAM_ID}</b> — الجولة: <b>${gw}</b>`;
+        $legend.innerHTML = `الفريق النشط: <b>${TEAM_ID}</b> — الجولة: <b>${gw}</b> &nbsp;|&nbsp; <span class="muted">يعرض Defcon من FPL (defensive_contribution).</span>`;
 
-        // bpsByFixture من live.elements
+        // bpsByFixture من live.elements (لسرد اللاعبين وترتيبهم)
         const bpsByFixture = {};
         if(Array.isArray(live.elements)){
           for(const el of live.elements){
@@ -150,7 +149,6 @@
 
         for (const f of fixtures) {
           const fxId = f.id;
-          const pulseId = f.pulse_id; // متوفر حسب بياناتك
           const home = teamShort(BOOT,f.team_h);
           const away = teamShort(BOOT,f.team_a);
           const ko   = f.kickoff_time ? new Date(f.kickoff_time).toLocaleString() : '—';
@@ -158,104 +156,34 @@
           const bpsList = (bpsByFixture[fxId] || []).sort((a,b)=>b.bps-a.bps).slice(0,12);
           const bonus = computeBonus(bpsList);
 
-          // 1) حاول جلب PL
-          let plPlayers = [];
-          if (pulseId) {
-            try {
-              const pl = await j(`/api/pl/match/${pulseId}`);
-              const pushPlayers = (arr) => {
-                for (const p of (arr||[])) {
-                  const name = p.name || p.player?.name || p.playerName || '';
-                  const s = p.stats || p.s || {};
-                  const get = (k) => Number((s[k]?.value ?? s[k] ?? 0));
-                  plPlayers.push({
-                    name,
-                    stats: {
-                      clearances: get('clearances'),
-                      blocks: get('blocks'),
-                      interceptions: get('interceptions'),
-                      clearances_blocks_interceptions:
-                        get('clearances_blocks_interceptions') || (get('clearances')+get('blocks')+get('interceptions')),
-                      tackles: get('tackles'),
-                      recoveries: get('recoveries'),
-                    }
-                  });
-                }
-              };
-              if (pl?.entity) {
-                pushPlayers(pl.entity?.home?.players);
-                pushPlayers(pl.entity?.away?.players);
-              }
-              if (pl?.players) pushPlayers(pl.players);
-              if (pl?.homeTeam?.players) pushPlayers(pl.homeTeam.players);
-              if (pl?.awayTeam?.players) pushPlayers(pl.awayTeam.players);
-              if (pl?.stats?.players) pushPlayers(pl.stats.players);
-            } catch(e) {
-              console.warn('PL fetch failed', pulseId, e);
-            }
-          }
-          const plMap = new Map(plPlayers.map(p => [p.name, p.stats]));
-
-          // 2) Fallback من FPL: defensive_contribution لهذه المباراة
+          // Defcon من FPL: defensive_contribution لهذه المباراة
           const dcMap = new Map();
           const dcStat = (f.stats || []).find(s => (s.identifier || '').toLowerCase().includes('defensive_contribution'));
           if (dcStat) {
-            for (const side of ['a','h']) {
-              for (const ent of (dcStat[side] || [])) {
-                if (ent && ent.element != null) {
-                  dcMap.set(ent.element, Number(ent.value || 0));
-                }
-              }
+            for (const side of ['a','h']) for (const ent of (dcStat[side] || [])) {
+              if (ent && ent.element != null) dcMap.set(ent.element, Number(ent.value || 0));
             }
           }
 
-          // الجدول
+          // رأس الجدول (مختصر)
           const thead = `
             <thead>
               <tr>
                 <th>اللاعب</th>
-                <th>BPS</th><th>Bonus</th>
-                <th>Clea</th><th>Blk</th><th>Int/CBI</th><th>Tack</th><th>Recv</th>
-                <th>Total</th><th>Defcon</th>
+                <th>BPS</th>
+                <th>Bonus</th>
+                <th>Defcon</th>
               </tr>
             </thead>`;
 
           const rows = bpsList.map(row=>{
-            const p = elementsById.get(row.element);
-            const name = p ? p.web_name : `#${row.element}`;
-            const pos  = p ? p.element_type : null; // 1 GK, 2 DEF, 3 MID, 4 FWD
+            const el = elementsById.get(row.element);
+            const name = el ? el.web_name : `#${row.element}`;
+            const pos  = el ? el.element_type : null; // 1 GK, 2 DEF, 3 MID, 4 FWD
+            const def  = Number(dcMap.get(row.element) || 0);
 
-            // طابق اسم PL إن وجد
-            let foundStats = null;
-            for (const [plName, s] of plMap.entries()) {
-              if (matchPlayer(name, plName)) { foundStats = s; break; }
-            }
-            const s = foundStats || {
-              clearances:0, blocks:0, interceptions:0,
-              clearances_blocks_interceptions:0, tackles:0, recoveries:0
-            };
-
-            // حساب Total/Defcon
-            let total, defcon;
-            if (foundStats) {
-              if (pos===1 || pos===2) { // DEF/GK
-                total = s.clearances + s.blocks + s.interceptions + s.tackles;
-                defcon = total >= 10 ? 2 : '';
-              } else { // MID/FWD
-                const cbi = s.clearances_blocks_interceptions || (s.clearances + s.blocks + s.interceptions);
-                total = s.clearances + s.blocks + cbi + s.tackles + s.recoveries;
-                defcon = total >= 12 ? 2 : '';
-              }
-            } else {
-              total = Number(dcMap.get(row.element) || 0); // Fallback من FPL
-              if (pos===1 || pos===2) defcon = total >= 10 ? 2 : '';
-              else defcon = total >= 12 ? 2 : '';
-            }
-
-            const intOrCbi = (pos===1||pos===2)
-              ? (s.interceptions || 0)
-              : (s.clearances_blocks_interceptions || (s.clearances + s.blocks + s.interceptions));
-            const recv = (pos===3||pos===4) ? (s.recoveries || 0) : '';
+            // تمييز بصري عندما يتجاوز العتبة
+            const isHigh = (pos===1 || pos===2) ? (def>=10) : (def>=12);
 
             // وسوم فريقي/الكابتن/الڤايس
             const mine = picks?.picks?.some(px=>px.element===row.element);
@@ -269,14 +197,9 @@
             return `
               <tr>
                 <td style="text-align:right">${name} ${tags.join(' ')}</td>
-                <td>${row.bps}</td><td class="bonus">${(bonus[row.element]||0)}</td>
-                <td>${s.clearances||0}</td>
-                <td>${s.blocks||0}</td>
-                <td>${intOrCbi||0}</td>
-                <td>${s.tackles||0}</td>
-                <td>${recv||0}</td>
-                <td class="${total? 'hi':''}">${total||0}</td>
-                <td>${defcon||''}</td>
+                <td>${row.bps}</td>
+                <td class="bonus">${(bonus[row.element]||0)}</td>
+                <td class="defcell ${isHigh?'hi':''}">${def}</td>
               </tr>`;
           }).join('');
 
